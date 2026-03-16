@@ -1,120 +1,109 @@
 import java.util.*;
 
-class PageEvent {
-    String url;
-    String userId;
-    String source;
+class TokenBucket {
 
-    public PageEvent(String url, String userId, String source) {
-        this.url = url;
-        this.userId = userId;
-        this.source = source;
+    private int maxTokens;
+    private double refillRate; // tokens per second
+    private double tokens;
+    private long lastRefillTime;
+
+    public TokenBucket(int maxTokens, double refillRate) {
+        this.maxTokens = maxTokens;
+        this.refillRate = refillRate;
+        this.tokens = maxTokens;
+        this.lastRefillTime = System.currentTimeMillis();
+    }
+
+    // Refill tokens based on time passed
+    private void refill() {
+
+        long now = System.currentTimeMillis();
+        double seconds = (now - lastRefillTime) / 1000.0;
+
+        double refillTokens = seconds * refillRate;
+
+        tokens = Math.min(maxTokens, tokens + refillTokens);
+
+        lastRefillTime = now;
+    }
+
+    // Try consuming a token
+    public synchronized boolean allowRequest() {
+
+        refill();
+
+        if (tokens >= 1) {
+            tokens -= 1;
+            return true;
+        }
+
+        return false;
+    }
+
+    public int getRemainingTokens() {
+        return (int) tokens;
     }
 }
 
-class RealTimeAnalytics {
+class RateLimiter {
 
-    // pageUrl -> visit count
-    private HashMap<String, Integer> pageVisits = new HashMap<>();
+    private HashMap<String, TokenBucket> clientBuckets = new HashMap<>();
 
-    // pageUrl -> unique users
-    private HashMap<String, Set<String>> uniqueVisitors = new HashMap<>();
+    private int maxRequests = 1000;
 
-    // traffic source -> count
-    private HashMap<String, Integer> trafficSources = new HashMap<>();
+    // 1000 requests per hour → convert to tokens per second
+    private double refillRate = 1000.0 / 3600;
 
-    // Process incoming event
-    public synchronized void processEvent(PageEvent event) {
+    public synchronized String checkRateLimit(String clientId) {
 
-        // Count page visits
-        pageVisits.put(event.url,
-                pageVisits.getOrDefault(event.url, 0) + 1);
+        clientBuckets.putIfAbsent(clientId,
+                new TokenBucket(maxRequests, refillRate));
 
-        // Track unique visitors
-        uniqueVisitors.putIfAbsent(event.url, new HashSet<>());
-        uniqueVisitors.get(event.url).add(event.userId);
+        TokenBucket bucket = clientBuckets.get(clientId);
 
-        // Count traffic sources
-        trafficSources.put(event.source,
-                trafficSources.getOrDefault(event.source, 0) + 1);
+        if (bucket.allowRequest()) {
+
+            return "Request Allowed → Remaining tokens: " +
+                    bucket.getRemainingTokens();
+
+        } else {
+
+            return "Rate Limit Exceeded → Try again later";
+        }
     }
 
-    // Get top 10 pages
-    private List<Map.Entry<String, Integer>> getTopPages() {
+    public void getRateLimitStatus(String clientId) {
 
-        PriorityQueue<Map.Entry<String, Integer>> pq =
-                new PriorityQueue<>(Map.Entry.comparingByValue());
-
-        for (Map.Entry<String, Integer> entry : pageVisits.entrySet()) {
-
-            pq.add(entry);
-
-            if (pq.size() > 10) {
-                pq.poll();
-            }
+        if (!clientBuckets.containsKey(clientId)) {
+            System.out.println("Client not found.");
+            return;
         }
 
-        List<Map.Entry<String, Integer>> result = new ArrayList<>(pq);
-        result.sort((a, b) -> b.getValue() - a.getValue());
+        TokenBucket bucket = clientBuckets.get(clientId);
 
-        return result;
-    }
+        int remaining = bucket.getRemainingTokens();
+        int used = maxRequests - remaining;
 
-    // Display dashboard
-    public void getDashboard() {
-
-        System.out.println("===== REAL-TIME ANALYTICS DASHBOARD =====");
-        System.out.println("\nTop Pages:");
-
-        List<Map.Entry<String, Integer>> topPages = getTopPages();
-
-        int rank = 1;
-        for (Map.Entry<String, Integer> entry : topPages) {
-
-            String page = entry.getKey();
-            int visits = entry.getValue();
-            int unique = uniqueVisitors.get(page).size();
-
-            System.out.println(rank + ". " + page +
-                    " - " + visits + " views (" +
-                    unique + " unique visitors)");
-            rank++;
-        }
-
-        System.out.println("\nTraffic Sources:");
-
-        int total = trafficSources.values().stream().mapToInt(i -> i).sum();
-
-        for (String source : trafficSources.keySet()) {
-
-            int count = trafficSources.get(source);
-            double percent = (count * 100.0) / total;
-
-            System.out.println(source + ": " +
-                    String.format("%.1f", percent) + "%");
-        }
-
-        System.out.println("=========================================");
+        System.out.println("Client: " + clientId);
+        System.out.println("Used Requests: " + used);
+        System.out.println("Remaining Requests: " + remaining);
+        System.out.println("Limit: " + maxRequests);
     }
 }
 
-public class Week1andWeek2Problems {
+public class Week1_and_Week2_Problems {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
 
-        RealTimeAnalytics analytics = new RealTimeAnalytics();
+        RateLimiter limiter = new RateLimiter();
 
-        // Simulated incoming events
-        analytics.processEvent(new PageEvent("/news/election-update", "user101", "google"));
-        analytics.processEvent(new PageEvent("/news/election-update", "user102", "direct"));
-        analytics.processEvent(new PageEvent("/tech/ai-breakthrough", "user103", "facebook"));
-        analytics.processEvent(new PageEvent("/sports/final-match", "user104", "google"));
-        analytics.processEvent(new PageEvent("/news/election-update", "user105", "google"));
-        analytics.processEvent(new PageEvent("/tech/ai-breakthrough", "user106", "direct"));
-        analytics.processEvent(new PageEvent("/sports/final-match", "user107", "twitter"));
-        analytics.processEvent(new PageEvent("/sports/final-match", "user108", "google"));
+        String client = "client_XYZ";
 
-        // Dashboard refresh every 5 seconds
-        analytics.getDashboard();
+        // Simulate API requests
+        System.out.println(limiter.checkRateLimit(client));
+        System.out.println(limiter.checkRateLimit(client));
+        System.out.println(limiter.checkRateLimit(client));
+
+        limiter.getRateLimitStatus(client);
     }
 }
