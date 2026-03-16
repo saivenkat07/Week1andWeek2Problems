@@ -91,7 +91,7 @@ class RateLimiter {
     }
 }
 
-public class Week1_and_Week2_Problems {
+public class Week1andWeek2Problems {
 
     public static void main(String[] args) {
 
