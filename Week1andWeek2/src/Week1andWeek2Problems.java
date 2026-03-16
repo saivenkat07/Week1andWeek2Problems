@@ -1,67 +1,51 @@
 import java.util.*;
 
-class UsernameChecker {
+class FlashSaleInventoryManager {
 
-    private HashMap<String, Integer> usernameMap;
+    // productId -> stock count
+    private HashMap<String, Integer> stockMap;
 
-    private HashMap<String, Integer> attemptFrequency;
+    // productId -> waiting list of users
+    private HashMap<String, Queue<Integer>> waitingList;
 
-    public UsernameChecker() {
-        usernameMap = new HashMap<>();
-        attemptFrequency = new HashMap<>();
+    public FlashSaleInventoryManager() {
+        stockMap = new HashMap<>();
+        waitingList = new HashMap<>();
     }
 
-
-    public void registerUser(String username, int userId) {
-        usernameMap.put(username, userId);
+    // Add product to inventory
+    public void addProduct(String productId, int stock) {
+        stockMap.put(productId, stock);
+        waitingList.put(productId, new LinkedList<>());
     }
 
-    public boolean checkAvailability(String username) {
-
-
-        attemptFrequency.put(username,
-                attemptFrequency.getOrDefault(username, 0) + 1);
-
-        return !usernameMap.containsKey(username);
+    // Check stock
+    public int checkStock(String productId) {
+        return stockMap.getOrDefault(productId, 0);
     }
 
+    // Purchase item (thread-safe)
+    public synchronized String purchaseItem(String productId, int userId) {
 
-    public List<String> suggestAlternatives(String username) {
+        int stock = stockMap.getOrDefault(productId, 0);
 
-        List<String> suggestions = new ArrayList<>();
+        if (stock > 0) {
+            stockMap.put(productId, stock - 1);
+            return "Purchase successful for user " + userId +
+                    ". Remaining stock: " + (stock - 1);
+        } else {
 
-        for (int i = 1; i <= 5; i++) {
-            String suggestion = username + i;
+            Queue<Integer> queue = waitingList.get(productId);
+            queue.add(userId);
 
-            if (!usernameMap.containsKey(suggestion)) {
-                suggestions.add(suggestion);
-            }
+            return "Stock unavailable. User " + userId +
+                    " added to waiting list at position #" + queue.size();
         }
-
-        String modified = username.replace("_", ".");
-        if (!usernameMap.containsKey(modified)) {
-            suggestions.add(modified);
-        }
-
-        return suggestions;
     }
 
-    public String getMostAttempted() {
-
-        String result = "";
-        int max = 0;
-
-        for (String username : attemptFrequency.keySet()) {
-
-            int count = attemptFrequency.get(username);
-
-            if (count > max) {
-                max = count;
-                result = username;
-            }
-        }
-
-        return result + " (" + max + " attempts)";
+    // View waiting list
+    public Queue<Integer> getWaitingList(String productId) {
+        return waitingList.get(productId);
     }
 }
 
@@ -69,26 +53,22 @@ public class Week1andWeek2Problems {
 
     public static void main(String[] args) {
 
-        UsernameChecker system = new UsernameChecker();
+        FlashSaleInventoryManager manager = new FlashSaleInventoryManager();
 
-        system.registerUser("Sai", 101);
-        system.registerUser("admin", 1);
-        system.registerUser("Venkat", 102);
+        // Add product with limited stock
+        manager.addProduct("PS5_CONSOLE", 3);
 
-        System.out.println("checkAvailability(\"Sai\") → "
-                + system.checkAvailability("Sai"));
+        // Check stock
+        System.out.println("Stock check → " + manager.checkStock("PS5_CONSOLE") + " units available");
 
-        System.out.println("checkAvailability(\"Venkat\") → "
-                + system.checkAvailability("Venkat"));
+        // Purchase attempts
+        System.out.println(manager.purchaseItem("PS5_CONSOLE", 1001));
+        System.out.println(manager.purchaseItem("PS5_CONSOLE", 1002));
+        System.out.println(manager.purchaseItem("PS5_CONSOLE", 1003));
+        System.out.println(manager.purchaseItem("PS5_CONSOLE", 1004));
+        System.out.println(manager.purchaseItem("PS5_CONSOLE", 1005));
 
-        System.out.println("suggestAlternatives(\"Sai\") → "
-                + system.suggestAlternatives("Sai"));
-
-        for (int i = 0; i < 10543; i++) {
-            system.checkAvailability("admin");
-        }
-
-        System.out.println("getMostAttempted() → "
-                + system.getMostAttempted());
+        // Show waiting list
+        System.out.println("Waiting List → " + manager.getWaitingList("PS5_CONSOLE"));
     }
 }
